@@ -1,6 +1,6 @@
 # Weekend Wizard
 
-Weekend Wizard is a local-first, intent-aware multi-tool assistant. A user can ask naturally for current weather, book recommendations, dog photos, or a safe joke. The app classifies the request with local Qwen, applies negative-tool guardrails, calls approved tools through MCP, and synthesizes an answer. Weather can use a city name or explicit coordinates; it does not silently default to Hyderabad.
+Weekend Wizard is a local-first, intent-aware multi-tool assistant. A user can ask naturally for current weather, book recommendations, dog photos, or a safe joke. The app classifies the request with local Qwen, applies negative-tool guardrails, calls approved tools through MCP, and synthesizes an answer. Weather can use a city name or explicit coordinates; it does not silently default to any city.
 
 ## Architecture
 
