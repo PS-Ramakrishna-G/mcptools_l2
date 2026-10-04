@@ -1,0 +1,144 @@
+[
+  {
+    "id": "tc_001",
+    "category": "multi_topic_books",
+    "prompt": "Find me 10 books on fincace, 10 on general knowledge, and 10 on sci-fi short stories",
+    "expected_tools": [
+      "books_tool"
+    ],
+    "expected_banned": [],
+    "expected_book_topics": [
+      "finance",
+      "general knowledge",
+      "sci-fi short stories"
+    ],
+    "expected_book_count": 30,
+    "is_help": false
+  },
+  {
+    "id": "tc_002",
+    "category": "book_cap_budget",
+    "prompt": "Give me 70 books on distributed systems and 50 books on python algorithms",
+    "expected_tools": [
+      "books_tool"
+    ],
+    "expected_banned": [],
+    "expected_book_topics": [
+      "distributed systems",
+      "python algorithms"
+    ],
+    "expected_book_count": 100,
+    "is_help": false
+  },
+  {
+    "id": "tc_003",
+    "category": "single_book_default",
+    "prompt": "I need some reading recommendations on clean code architecture",
+    "expected_tools": [
+      "books_tool"
+    ],
+    "expected_banned": [],
+    "expected_book_topics": [
+      "clean code architecture"
+    ],
+    "expected_book_count": 10,
+    "is_help": false
+  },
+  {
+    "id": "tc_004",
+    "category": "dog_breed_normalization",
+    "prompt": "Show me cute german shepard photos and check outdoor weather in Hyderabad at (17.385, 78.486)",
+    "expected_tools": [
+      "dog_tool",
+      "weather_tool"
+    ],
+    "expected_banned": [],
+    "expected_breed": "germanshepherd",
+    "is_help": false
+  },
+  {
+    "id": "tc_005",
+    "category": "dog_breed_alias",
+    "prompt": "Can you show a golden retriever picture for chill weekend vibes?",
+    "expected_tools": [
+      "dog_tool"
+    ],
+    "expected_banned": [],
+    "expected_breed": "retriever/golden",
+    "is_help": false
+  },
+  {
+    "id": "tc_006",
+    "category": "negative_guardrail_single",
+    "prompt": "Check the temperature at (17.385, 78.486) and tell me a joke, but do not mention any weather",
+    "expected_tools": [
+      "joke_tool"
+    ],
+    "expected_banned": [
+      "weather_tool"
+    ],
+    "is_help": false
+  },
+  {
+    "id": "tc_007",
+    "category": "negative_guardrail_multi",
+    "prompt": "Plan my weekend: suggest books on algorithms, a dog picture, and a joke, but skip dog photos and avoid jokes",
+    "expected_tools": [
+      "books_tool"
+    ],
+    "expected_banned": [
+      "dog_tool",
+      "joke_tool"
+    ],
+    "is_help": false
+  },
+  {
+    "id": "tc_008",
+    "category": "negative_guardrail_total_block",
+    "prompt": "Check the current weather in Hyderabad, but don't show any weather info",
+    "expected_tools": [],
+    "expected_banned": [
+      "weather_tool"
+    ],
+    "is_help": false
+  },
+  {
+    "id": "tc_009",
+    "category": "full_itinerary",
+    "prompt": "Plan a cozy Saturday in Hyderabad at (17.385, 78.486): get live weather, suggest 5 python books, crack a programmer joke, and share a pug image",
+    "expected_tools": [
+      "weather_tool",
+      "books_tool",
+      "joke_tool",
+      "dog_tool"
+    ],
+    "expected_banned": [],
+    "expected_breed": "pug",
+    "expected_book_count": 5,
+    "is_help": false
+  },
+  {
+    "id": "tc_010",
+    "category": "greeting_and_capabilities",
+    "prompt": "Hello! What kind of things can you assist me with today?",
+    "expected_tools": [],
+    "expected_banned": [],
+    "is_help": true
+  },
+  {
+    "id": "tc_011",
+    "category": "out_of_scope_coding",
+    "prompt": "Write a Python script to reverse a doubly linked list without using extra memory",
+    "expected_tools": [],
+    "expected_banned": [],
+    "is_help": false
+  },
+  {
+    "id": "tc_012",
+    "category": "out_of_scope_finance",
+    "prompt": "Which Nifty 50 call options should I buy for next week's expiry?",
+    "expected_tools": [],
+    "expected_banned": [],
+    "is_help": false
+  }
+]

@@ -1,0 +1,143 @@
+# Weekend Wizard: Project Plan
+
+## Goal
+
+Build an intent-aware, guardrailed multi-tool assistant that accepts natural requests, extracts clean parameters, calls the existing APIs through MCP in parallel, and returns accurate, readable results. The first book milestone is 10 results per requested topic, with a hard cap of 100 books total per request.
+
+## Current State
+
+- FastAPI serves the browser UI and owns an MCP client session in `app.py`.
+- `routing_engine/decision.py` uses local Qwen JSON output to select tools and extract one book topic, one dog breed, or weather coordinates.
+- `routing_engine/guardrail_engine.py` adds explicit-negation filtering and an embedding-based fallback.
+- `orchastrator/agent_fun.py` dispatches approved tools through MCP concurrently with `asyncio.gather`.
+- MCP exposes weather, book search, dog image, and joke tools in `orchastrator/server_fun.py`.
+- Request lifecycle events are written to a local JSONL log.
+- Open Library currently defaults to 3 results. The router supports only one book topic per request. Dog breed input has no synonym normalization.
+- Final factual output still depends on Qwen rewriting tool results; recent logs show it can ignore successful results and return a generic message.
+- `.env` currently selects `qwen2.5-coder:1.5b`. The requested `qwen2.5:7b` model was not present in the last `ollama list` check and is still being downloaded.
+- Gemini support already exists for final answer generation. No active Gemini key was detected, so current requests use local Qwen. The classifier remains local Qwen even when Gemini is enabled.
+- The installed 7B model's tool-call behavior and CPU latency have not yet been established.
+
+## Model and Provider Configuration
+
+- After `qwen2.5:7b` finishes downloading, verify it with `ollama list`, then set `DEFAULT_QWEN_MODEL="qwen2.5:7b"` in `.env`. Keep the model name in one configuration location; both Qwen classification and local answer generation should use it.
+- Apply the initial CPU options to both local Qwen calls in `llm_client.py`: `num_thread=6` and `num_ctx=2048`. Use `temperature=0.0` for JSON intent classification and retain a small nonzero temperature (initially `0.2`) for natural-language synthesis. These are starting values, not guaranteed optimal settings; measure latency and memory on the target machine before changing them.
+- Gemini is an optional final-answer provider. If a valid `GEMINI_API_KEY` is configured, use Gemini for synthesis; if it is absent or the Gemini request fails, fall back to local Qwen. Keep intent classification local so tool decisions and guardrail processing do not require a cloud key.
+- Never commit or paste credentials into prompts, documentation, or source. Use a fresh key in a local environment variable or ignored `.env`; do not reactivate any previously exposed key value.
+- `configured_provider()` currently reports whether a key is configured, not necessarily which provider answered after fallback. Update health/status reporting to distinguish configured preference from actual per-request provider.
+- Do not send 100 raw book records to either model. Format validated API results deterministically and keep only compact metadata in prompts and logs.
+
+## Recommended Architecture
+
+Keep the current MCP boundary. Do not have the agent call API helpers directly: API calls should continue through `ClientSession.call_tool`, so MCP remains the tool contract.
+
+Use this flow:
+
+```text
+User request
+	-> Qwen intent and parameter extraction
+	-> validate known intents, limits, and parameters
+	-> enforce explicit exclusions as a hard denylist
+	-> call approved MCP tools concurrently
+	-> retain compact structured tool results
+	-> render factual results deterministically
+	-> optionally use Qwen for a short introduction or transitions
+	-> verify exclusions and return the response
+```
+
+This extends the existing JSON classifier and avoids adding a second tool-registration system. Revisit native Ollama tool calling only after confirming the installed model supports it reliably and mapping model tool calls to MCP rather than bypassing MCP.
+
+## Scope Decision
+
+The current guardrails describe a focused Weekend Wizard, not unrestricted ChatGPT. Keep greetings, capability questions, and brief small talk conversational. Redirect unrelated questions unless the product owner explicitly chooses to allow general-purpose answers. Do not let the router prompt and guardrails disagree about this boundary.
+
+## Phases
+
+### 1. Structured Intent Plan
+
+Extend the router output from a single `book_topic` to a list of book requests, for example:
+
+```json
+{
+	"selected_tools": ["books_tool"],
+	"banned_tools": [],
+	"parameters": {
+		"book_requests": [
+			{"topic": "finance", "count": 10},
+			{"topic": "general fiction", "count": 10},
+			{"topic": "short stories", "count": 10}
+		],
+		"weather_coords": null,
+		"city": null,
+		"dog_breed": null
+	}
+}
+```
+
+- Interpret a missing count as 10 for books.
+- Clamp each count to 1-100 and the aggregate book count to 100.
+- Extract the topic separately from filler and common typos, such as `fincace` to `finance`.
+- Preserve all requested topics rather than collapsing them into one search.
+- Normalize city/coordinate and breed parameters; validate values before dispatch.
+- Keep `banned_tools` authoritative. Remove banned actions after classification and before creating any MCP task.
+
+### 2. API and MCP Data Contracts
+
+- Update `api_connections/books_api.py` to accept a bounded result count and request only title, author, and publication year fields from Open Library.
+- Return structured book objects rather than a preformatted paragraph, so the UI and response formatter can render reliable lists.
+- Update the MCP book tool to accept topic and count and return the structured result.
+- Normalize common dog names and aliases to Dog CEO breed paths, including `german shepard`/`german shepherd` to `germanshepherd`, `golden retriever` to `retriever/golden`, and `wiener dog` to `dachshund`.
+- If a specifically requested breed cannot be found, report that result; do not silently substitute a random breed.
+- Add Open-Meteo geocoding only if city names must work independently of the UI's coordinate inputs/defaults.
+
+### 3. Parallel MCP Orchestration
+
+- Create one MCP task for each approved intent and each book topic, then await independent tasks together.
+- Never create a task for a banned tool, including when a request both asks for and excludes that tool.
+- Keep per-tool status, latency, and structured output separate so one API failure does not hide other successful results.
+- Include requested and returned counts so partial Open Library results are clear.
+
+### 4. Grounded Response Rendering
+
+- Format weather, book lists, dog links, and jokes from successful tool results in application code.
+- For books, produce separate headings per requested topic and number the returned records. Do not ask Qwen to regenerate or remember a large result list.
+- For dog images, render the returned URL directly. For jokes, honor a requested count only after the joke API/tool supports that count; otherwise clearly return the supported number rather than inventing jokes.
+- Let Qwen add a short relevant introduction or transitions, but do not let it replace, contradict, or omit tool facts.
+- If Qwen returns a generic answer while tools succeeded, use the deterministic formatted tool output as the response.
+- Enforce the negative-topic denylist on the final response as well as before tool execution.
+
+### 5. Large-Result and Reliability Limits
+
+- Enforce the 100-book aggregate maximum before API dispatch.
+- Project API responses to title, author, and year before they enter prompts or logs.
+- Keep large result lists out of the Qwen synthesis context; return the formatted list directly or paginate it in the UI.
+- Preserve request timeouts and partial-error reporting. Consider bounded retries only for transient upstream failures.
+- Record requested count, returned count, tool status, and latency in the request trace. Avoid logging credentials or unnecessary full user/tool content.
+
+### 6. Verification Gate
+
+After implementation, verify these behaviors with mocked API results first, then a small live smoke run:
+
+| Request | Expected behavior |
+|---|---|
+| `Find books on finance` | One finance search; default up to 10 results |
+| `Give me 10 finance books, 10 general fiction books, and 10 short-story collections` | Three MCP book calls in parallel; distinct sections; up to 30 results |
+| `Find 100 books on finance` | Bounded request for no more than 100; compact fields only |
+| Request for more than 100 books total | Clamp to 100 and disclose the cap |
+| `Show me a german shepard` | Normalize the breed and return the requested breed image or a clear not-found result |
+| `Find books and tell a joke, but do not include jokes` | Book search only; no joke call and no joke in the reply |
+| One API fails during a multi-tool request | Show other successful results and report the failed tool without fabricating data |
+| General greeting or out-of-scope request | Follow the chosen product scope consistently |
+
+Run the existing unit suite after the behavior is implemented; keep the live smoke run separate so public API availability does not determine unit-test results.
+
+## Recommended Build Order
+
+1. Finish pulling Qwen 2.5 7B, verify it appears in `ollama list`, and configure `DEFAULT_QWEN_MODEL`; keep local Qwen as the no-key path.
+2. Apply the initial Qwen CPU options to classification and synthesis, then measure local latency and memory.
+3. Confirm the scope decision and the `10 default / 100 total` book policy.
+4. Implement and validate the structured multi-topic intent schema and hard guardrail filter.
+5. Add bounded book counts, compact API fields, and breed normalization at the API/MCP boundary.
+6. Update the orchestrator to dispatch multiple topics through MCP in parallel.
+7. Add deterministic result formatting and a final exclusion check so successful tool data cannot be replaced by a generic model response.
+8. Verify the listed cases, then update the browser UI for grouped/paginated book results if needed.
